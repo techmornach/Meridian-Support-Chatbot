@@ -1,0 +1,60 @@
+name: Deploy EC2
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Deploy over SSH
+        uses: appleboy/ssh-action@v1.0.3
+        env:
+          APP_DOMAIN: meridian.home.jaraflytech.com
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          OPENAI_MODEL: gpt-4o-mini
+          GUARDRAIL_MODEL: gpt-4o-mini
+          MCP_SERVER_URL: ${{ secrets.MCP_SERVER_URL }}
+          POSTGRES_DB: meridian_chatbot
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
+          AUTH_TOKEN_TTL_SECONDS: "3600"
+          MAX_INPUT_CHARS: "4000"
+          HISTORY_CONTEXT_LIMIT: "30"
+          LOG_LEVEL: INFO
+          ENABLE_OPENAI_TRACING: "true"
+          LETSENCRYPT_EMAIL: ${{ secrets.LETSENCRYPT_EMAIL }}
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_PRIVATE_KEY }}
+          port: 22
+          envs: APP_DOMAIN,OPENAI_API_KEY,OPENAI_MODEL,GUARDRAIL_MODEL,MCP_SERVER_URL,POSTGRES_DB,POSTGRES_USER,POSTGRES_PASSWORD,AUTH_TOKEN_TTL_SECONDS,MAX_INPUT_CHARS,HISTORY_CONTEXT_LIMIT,LOG_LEVEL,ENABLE_OPENAI_TRACING,LETSENCRYPT_EMAIL
+          script_stop: true
+          script: |
+            set -euxo pipefail
+            curl -fsSL https://raw.githubusercontent.com/techmornach/Meridian-Support-Chatbot/main/scripts/ec2-deploy.sh -o /tmp/ec2-deploy.sh
+            chmod +x /tmp/ec2-deploy.sh
+            APP_DOMAIN="${APP_DOMAIN}" \
+            OPENAI_API_KEY="${OPENAI_API_KEY}" \
+            OPENAI_MODEL="${OPENAI_MODEL}" \
+            GUARDRAIL_MODEL="${GUARDRAIL_MODEL}" \
+            MCP_SERVER_URL="${MCP_SERVER_URL}" \
+            POSTGRES_DB="${POSTGRES_DB}" \
+            POSTGRES_USER="${POSTGRES_USER}" \
+            POSTGRES_PASSWORD="${POSTGRES_PASSWORD}" \
+            AUTH_TOKEN_TTL_SECONDS="${AUTH_TOKEN_TTL_SECONDS}" \
+            MAX_INPUT_CHARS="${MAX_INPUT_CHARS}" \
+            HISTORY_CONTEXT_LIMIT="${HISTORY_CONTEXT_LIMIT}" \
+            LOG_LEVEL="${LOG_LEVEL}" \
+            ENABLE_OPENAI_TRACING="${ENABLE_OPENAI_TRACING}" \
+            LETSENCRYPT_EMAIL="${LETSENCRYPT_EMAIL}" \
+            /tmp/ec2-deploy.sh

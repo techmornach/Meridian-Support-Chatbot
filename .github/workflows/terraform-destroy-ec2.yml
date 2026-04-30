@@ -1,0 +1,48 @@
+name: Terraform Destroy EC2
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm_destroy:
+        description: "Type DESTROY to confirm EC2 teardown."
+        required: true
+        default: ""
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  destroy:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: infra/ec2
+    env:
+      TF_VAR_aws_region: ${{ secrets.AWS_REGION }}
+      TF_VAR_hosted_zone_name: home.jaraflytech.com
+      TF_VAR_subdomain: meridian
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Validate Confirmation
+        if: ${{ github.event.inputs.confirm_destroy != 'DESTROY' }}
+        run: |
+          echo "Refusing to destroy: set confirm_destroy to DESTROY."
+          exit 1
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+
+      - name: Terraform Init
+        run: terraform init
+
+      - name: Terraform Destroy
+        run: terraform destroy -auto-approve

@@ -1,0 +1,7 @@
+aws_region       = "us-east-1"
+project_name     = "meridian-support-chatbot"
+instance_type    = "t3.small"
+ssh_key_name     = ""
+allowed_ssh_cidr = "0.0.0.0/0"
+hosted_zone_name = "home.jaraflytech.com"
+subdomain        = "meridian"

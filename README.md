@@ -198,3 +198,42 @@ Set these secrets in your GitHub repo:
 - Run `Terraform Destroy App Runner` workflow manually.
 - In the workflow input, set `confirm_destroy` to `DESTROY`.
 - This tears down App Runner + ECR resources managed by `infra/apprunner`.
+
+## Fast EC2 deployment (no Docker)
+
+For fastest stakeholder sharing, use native EC2 services (no containers):
+
+- PostgreSQL on EC2
+- FastAPI backend as `systemd` service
+- Next.js frontend as `systemd` service
+- Caddy for HTTPS + reverse proxy
+- Route53 record: `https://meridian.home.jaraflytech.com/`
+
+### 1) Provision EC2 + DNS
+
+```bash
+cd infra/ec2
+cp terraform.tfvars.example terraform.tfvars
+terraform init
+terraform apply
+```
+
+### 2) GitHub secrets for deploy workflow
+
+Set:
+
+- `EC2_HOST` (public IP or DNS from Terraform output)
+- `EC2_USER` (`ubuntu`)
+- `EC2_SSH_PRIVATE_KEY` (private key for the instance key pair)
+- `OPENAI_API_KEY`
+- `MCP_SERVER_URL`
+- `POSTGRES_PASSWORD`
+
+The workflow `Deploy EC2` uses your real app env shape (`OPENAI_MODEL`, `GUARDRAIL_MODEL`, `AUTH_TOKEN_TTL_SECONDS`, `MAX_INPUT_CHARS`, `HISTORY_CONTEXT_LIMIT`, `LOG_LEVEL`, `ENABLE_OPENAI_TRACING`) with values aligned to current `.env`.
+
+### 3) Deploy
+
+- Run `Deploy EC2` workflow (or push to `main`).
+- It executes `scripts/ec2-deploy.sh` on the instance.
+- When complete, app should be reachable at:
+  - `https://meridian.home.jaraflytech.com/`
