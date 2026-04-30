@@ -10,8 +10,14 @@ variable "project_name" {
   default     = "meridian-support-chatbot"
 }
 
-variable "instance_type" {
-  description = "EC2 instance type."
+variable "frontend_instance_type" {
+  description = "Frontend EC2 instance type."
+  type        = string
+  default     = "t3.small"
+}
+
+variable "backend_instance_type" {
+  description = "Backend EC2 instance type."
   type        = string
   default     = "t3.small"
 }
@@ -34,10 +40,16 @@ variable "hosted_zone_name" {
   default     = "home.jaraflytech.com"
 }
 
-variable "subdomain" {
-  description = "Subdomain label for app endpoint."
+variable "frontend_subdomain" {
+  description = "Subdomain label for frontend endpoint."
   type        = string
   default     = "meridian"
+}
+
+variable "backend_subdomain" {
+  description = "Subdomain label for backend endpoint."
+  type        = string
+  default     = "api"
 }
 
 variable "availability_zone" {

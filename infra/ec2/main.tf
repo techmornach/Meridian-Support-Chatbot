@@ -71,9 +71,9 @@ resource "aws_security_group" "ec2" {
   }
 }
 
-resource "aws_instance" "app" {
+resource "aws_instance" "frontend" {
   ami                         = data.aws_ami.ubuntu.id
-  instance_type               = var.instance_type
+  instance_type               = var.frontend_instance_type
   subnet_id                   = data.aws_subnet.default_az.id
   vpc_security_group_ids      = [aws_security_group.ec2.id]
   associate_public_ip_address = true
@@ -89,19 +89,54 @@ resource "aws_instance" "app" {
   EOF
 
   tags = {
-    Name = "${var.project_name}-ec2"
+    Name = "${var.project_name}-frontend-ec2"
   }
 }
 
-resource "aws_eip" "app" {
-  domain   = "vpc"
-  instance = aws_instance.app.id
+resource "aws_instance" "backend" {
+  ami                         = data.aws_ami.ubuntu.id
+  instance_type               = var.backend_instance_type
+  subnet_id                   = data.aws_subnet.default_az.id
+  vpc_security_group_ids      = [aws_security_group.ec2.id]
+  associate_public_ip_address = true
+  key_name                    = var.ssh_key_name == "" ? null : var.ssh_key_name
+
+  user_data = <<-EOF
+    #!/bin/bash
+    set -eux
+    apt-get update
+    apt-get install -y ca-certificates curl git
+    mkdir -p /opt/meridian
+    chown -R ubuntu:ubuntu /opt/meridian
+  EOF
+
+  tags = {
+    Name = "${var.project_name}-backend-ec2"
+  }
 }
 
-resource "aws_route53_record" "app" {
+resource "aws_eip" "frontend" {
+  domain   = "vpc"
+  instance = aws_instance.frontend.id
+}
+
+resource "aws_eip" "backend" {
+  domain   = "vpc"
+  instance = aws_instance.backend.id
+}
+
+resource "aws_route53_record" "frontend" {
   zone_id = data.aws_route53_zone.main.zone_id
-  name    = "${var.subdomain}.${var.hosted_zone_name}"
+  name    = "${var.frontend_subdomain}.${var.hosted_zone_name}"
   type    = "A"
   ttl     = 60
-  records = [aws_eip.app.public_ip]
+  records = [aws_eip.frontend.public_ip]
+}
+
+resource "aws_route53_record" "backend" {
+  zone_id = data.aws_route53_zone.main.zone_id
+  name    = "${var.backend_subdomain}.${var.hosted_zone_name}"
+  type    = "A"
+  ttl     = 60
+  records = [aws_eip.backend.public_ip]
 }

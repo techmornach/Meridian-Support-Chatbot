@@ -9,16 +9,16 @@ permissions:
   contents: read
 
 jobs:
-  deploy:
+  deploy-backend:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Deploy over SSH
+      - name: Deploy backend over SSH
         uses: appleboy/ssh-action@v1.0.3
         env:
-          APP_DOMAIN: meridian.home.jaraflytech.com
+          APP_DOMAIN: api.home.jaraflytech.com
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           OPENAI_MODEL: gpt-4o-mini
           GUARDRAIL_MODEL: gpt-4o-mini
@@ -32,17 +32,18 @@ jobs:
           LOG_LEVEL: INFO
           ENABLE_OPENAI_TRACING: "true"
           LETSENCRYPT_EMAIL: ${{ secrets.LETSENCRYPT_EMAIL }}
+          CORS_ALLOWED_ORIGINS: https://meridian.home.jaraflytech.com
         with:
-          host: ${{ secrets.EC2_HOST }}
+          host: ${{ secrets.EC2_BACKEND_HOST }}
           username: ${{ secrets.EC2_USER }}
           key: ${{ secrets.EC2_SSH_PRIVATE_KEY }}
           port: 22
-          envs: APP_DOMAIN,OPENAI_API_KEY,OPENAI_MODEL,GUARDRAIL_MODEL,MCP_SERVER_URL,POSTGRES_DB,POSTGRES_USER,POSTGRES_PASSWORD,AUTH_TOKEN_TTL_SECONDS,MAX_INPUT_CHARS,HISTORY_CONTEXT_LIMIT,LOG_LEVEL,ENABLE_OPENAI_TRACING,LETSENCRYPT_EMAIL
+          envs: APP_DOMAIN,OPENAI_API_KEY,OPENAI_MODEL,GUARDRAIL_MODEL,MCP_SERVER_URL,POSTGRES_DB,POSTGRES_USER,POSTGRES_PASSWORD,AUTH_TOKEN_TTL_SECONDS,MAX_INPUT_CHARS,HISTORY_CONTEXT_LIMIT,LOG_LEVEL,ENABLE_OPENAI_TRACING,LETSENCRYPT_EMAIL,CORS_ALLOWED_ORIGINS
           script_stop: true
           script: |
             set -euxo pipefail
-            curl -fsSL https://raw.githubusercontent.com/techmornach/Meridian-Support-Chatbot/main/scripts/ec2-deploy.sh -o /tmp/ec2-deploy.sh
-            chmod +x /tmp/ec2-deploy.sh
+            curl -fsSL https://raw.githubusercontent.com/techmornach/Meridian-Support-Chatbot/main/scripts/ec2-deploy-backend.sh -o /tmp/ec2-deploy-backend.sh
+            chmod +x /tmp/ec2-deploy-backend.sh
             APP_DOMAIN="${APP_DOMAIN}" \
             OPENAI_API_KEY="${OPENAI_API_KEY}" \
             OPENAI_MODEL="${OPENAI_MODEL}" \
@@ -57,4 +58,31 @@ jobs:
             LOG_LEVEL="${LOG_LEVEL}" \
             ENABLE_OPENAI_TRACING="${ENABLE_OPENAI_TRACING}" \
             LETSENCRYPT_EMAIL="${LETSENCRYPT_EMAIL}" \
-            /tmp/ec2-deploy.sh
+            CORS_ALLOWED_ORIGINS="${CORS_ALLOWED_ORIGINS}" \
+            /tmp/ec2-deploy-backend.sh
+
+  deploy-frontend:
+    runs-on: ubuntu-latest
+    needs: deploy-backend
+    steps:
+      - name: Deploy frontend over SSH
+        uses: appleboy/ssh-action@v1.0.3
+        env:
+          APP_DOMAIN: meridian.home.jaraflytech.com
+          BACKEND_PUBLIC_URL: https://api.home.jaraflytech.com
+          LETSENCRYPT_EMAIL: ${{ secrets.LETSENCRYPT_EMAIL }}
+        with:
+          host: ${{ secrets.EC2_FRONTEND_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_PRIVATE_KEY }}
+          port: 22
+          envs: APP_DOMAIN,BACKEND_PUBLIC_URL,LETSENCRYPT_EMAIL
+          script_stop: true
+          script: |
+            set -euxo pipefail
+            curl -fsSL https://raw.githubusercontent.com/techmornach/Meridian-Support-Chatbot/main/scripts/ec2-deploy-frontend.sh -o /tmp/ec2-deploy-frontend.sh
+            chmod +x /tmp/ec2-deploy-frontend.sh
+            APP_DOMAIN="${APP_DOMAIN}" \
+            BACKEND_PUBLIC_URL="${BACKEND_PUBLIC_URL}" \
+            LETSENCRYPT_EMAIL="${LETSENCRYPT_EMAIL}" \
+            /tmp/ec2-deploy-frontend.sh

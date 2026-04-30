@@ -183,7 +183,15 @@ export default function ChatPage() {
       setIsLoadingHistory(true);
       setError(null);
       try {
-        const response = await fetch(clientApiPath("/conversations/me"), {
+        const publicBackendBaseUrl = (
+          process.env.NEXT_PUBLIC_BACKEND_API_URL ?? ""
+        )
+          .trim()
+          .replace(/\/+$/, "");
+        const historyPath = publicBackendBaseUrl
+          ? `${publicBackendBaseUrl}/conversations/me`
+          : "/api/conversations";
+        const response = await fetch(historyPath, {
           headers: {
             Authorization: `Bearer ${stored}`,
           },
@@ -254,7 +262,10 @@ export default function ChatPage() {
     ]);
 
     try {
-      const response = await fetch(clientApiPath("/chat?stream=false"), {
+      const chatPath = process.env.NEXT_PUBLIC_BACKEND_API_URL
+        ? clientApiPath("/chat?stream=false")
+        : "/api/chat?stream=false";
+      const response = await fetch(chatPath, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

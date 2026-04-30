@@ -13,32 +13,23 @@ if [ -z "${OPENAI_API_KEY:-}" ]; then
 fi
 
 export DEBIAN_FRONTEND=noninteractive
-
-sudo rm -f /etc/apt/sources.list.d/caddy-stable.list
-sudo rm -f /etc/apt/keyrings/caddy-stable-archive-keyring.gpg
-
 sudo apt-get update
 sudo apt-get install -y ca-certificates curl git postgresql postgresql-contrib python3 python3-pip nginx certbot python3-certbot-nginx
-
-if ! command -v node >/dev/null 2>&1; then
-  curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
-  sudo apt-get install -y nodejs
-fi
 
 if ! command -v uv >/dev/null 2>&1; then
   curl -LsSf https://astral.sh/uv/install.sh | sh
 fi
-
 export PATH="$HOME/.local/bin:$PATH"
 
 sudo mkdir -p /opt/meridian
 sudo chown -R "$USER:$USER" /opt/meridian
 
+if [ ! -d /opt/meridian/.git ]; then
+  git clone https://github.com/techmornach/Meridian-Support-Chatbot.git /opt/meridian
+fi
+
 cd /opt/meridian
 if [ "${SKIP_GIT_PULL:-0}" != "1" ]; then
-  if [ ! -d /opt/meridian/.git ]; then
-    git clone https://github.com/techmornach/Meridian-Support-Chatbot.git /opt/meridian
-  fi
   git fetch --all
   git reset --hard origin/main
 fi
@@ -54,12 +45,12 @@ MAX_INPUT_CHARS="${MAX_INPUT_CHARS:-4000}"
 HISTORY_CONTEXT_LIMIT="${HISTORY_CONTEXT_LIMIT:-30}"
 LOG_LEVEL="${LOG_LEVEL:-INFO}"
 ENABLE_OPENAI_TRACING="${ENABLE_OPENAI_TRACING:-true}"
+CORS_ALLOWED_ORIGINS="${CORS_ALLOWED_ORIGINS:-https://meridian.home.jaraflytech.com}"
 LETSENCRYPT_EMAIL="${LETSENCRYPT_EMAIL:-admin@home.jaraflytech.com}"
 DATABASE_URL="postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@127.0.0.1:5432/${POSTGRES_DB}"
 
 sudo systemctl enable postgresql
 sudo systemctl restart postgresql
-
 sudo -u postgres psql -v ON_ERROR_STOP=1 -c "ALTER USER ${POSTGRES_USER} WITH PASSWORD '${POSTGRES_PASSWORD}';" postgres
 sudo -u postgres psql -v ON_ERROR_STOP=1 -tAc "SELECT 1 FROM pg_database WHERE datname='${POSTGRES_DB}'" | grep -q 1 || sudo -u postgres psql -v ON_ERROR_STOP=1 -c "CREATE DATABASE ${POSTGRES_DB};" postgres
 
@@ -74,21 +65,10 @@ MAX_INPUT_CHARS=${MAX_INPUT_CHARS}
 HISTORY_CONTEXT_LIMIT=${HISTORY_CONTEXT_LIMIT}
 LOG_LEVEL=${LOG_LEVEL}
 ENABLE_OPENAI_TRACING=${ENABLE_OPENAI_TRACING}
-CORS_ALLOWED_ORIGINS=https://${APP_DOMAIN}
-EOF
-
-cat > /opt/meridian/.frontend.env <<EOF
-BACKEND_API_URL=http://127.0.0.1:8000
-NEXT_PUBLIC_BACKEND_API_URL=
+CORS_ALLOWED_ORIGINS=${CORS_ALLOWED_ORIGINS}
 EOF
 
 uv sync --frozen --no-dev
-if [ -f frontend/package-lock.json ]; then
-  npm --prefix frontend ci
-else
-  npm --prefix frontend install
-fi
-npm --prefix frontend run build
 
 sudo tee /etc/systemd/system/meridian-backend.service >/dev/null <<'EOF'
 [Unit]
@@ -108,31 +88,13 @@ RestartSec=3
 WantedBy=multi-user.target
 EOF
 
-sudo tee /etc/systemd/system/meridian-frontend.service >/dev/null <<'EOF'
-[Unit]
-Description=Meridian Next.js frontend
-After=network.target meridian-backend.service
-
-[Service]
-Type=simple
-User=ubuntu
-WorkingDirectory=/opt/meridian
-EnvironmentFile=/opt/meridian/.frontend.env
-ExecStart=/usr/bin/npm --prefix frontend run start -- --hostname 127.0.0.1 --port 3000
-Restart=always
-RestartSec=3
-
-[Install]
-WantedBy=multi-user.target
-EOF
-
-sudo tee /etc/nginx/sites-available/meridian.conf >/dev/null <<EOF
+sudo tee /etc/nginx/sites-available/meridian-api.conf >/dev/null <<EOF
 server {
   listen 80;
   server_name ${APP_DOMAIN};
 
   location / {
-    proxy_pass http://127.0.0.1:3000;
+    proxy_pass http://127.0.0.1:8000;
     proxy_http_version 1.1;
     proxy_set_header Host \$host;
     proxy_set_header X-Real-IP \$remote_addr;
@@ -143,18 +105,15 @@ server {
 EOF
 
 sudo rm -f /etc/nginx/sites-enabled/default
-sudo ln -sf /etc/nginx/sites-available/meridian.conf /etc/nginx/sites-enabled/meridian.conf
+sudo ln -sf /etc/nginx/sites-available/meridian-api.conf /etc/nginx/sites-enabled/meridian-api.conf
 
 sudo systemctl daemon-reload
-sudo systemctl enable meridian-backend meridian-frontend nginx
+sudo systemctl enable meridian-backend nginx
 sudo systemctl restart meridian-backend
-sudo systemctl restart meridian-frontend
 sudo systemctl restart nginx
 
 if getent hosts "${APP_DOMAIN}" >/dev/null 2>&1; then
   sudo certbot --nginx -d "${APP_DOMAIN}" --non-interactive --agree-tos -m "${LETSENCRYPT_EMAIL}" --redirect || true
-else
-  echo "DNS for ${APP_DOMAIN} not resolvable yet; skipping certbot for now."
 fi
 
-echo "Deployment completed: https://${APP_DOMAIN}/"
+echo "Backend deployed: https://${APP_DOMAIN}/"

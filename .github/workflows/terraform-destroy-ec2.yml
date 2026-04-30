@@ -21,7 +21,8 @@ jobs:
     env:
       TF_VAR_aws_region: ${{ secrets.AWS_REGION }}
       TF_VAR_hosted_zone_name: home.jaraflytech.com
-      TF_VAR_subdomain: meridian
+      TF_VAR_frontend_subdomain: meridian
+      TF_VAR_backend_subdomain: api
     steps:
       - name: Checkout
         uses: actions/checkout@v4
