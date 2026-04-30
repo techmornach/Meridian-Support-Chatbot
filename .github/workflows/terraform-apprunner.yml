@@ -32,5 +32,22 @@ jobs:
       - name: Terraform Init
         run: terraform init
 
-      - name: Terraform Apply
+      - name: Bootstrap ECR and IAM
+        run: >
+          terraform apply -auto-approve
+          -target=aws_ecr_repository.app
+          -target=aws_iam_role.apprunner_access_role
+          -target=aws_iam_role_policy_attachment.apprunner_ecr_access
+
+      - name: Login to Amazon ECR
+        id: ecr-login
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build and Push Bootstrap Image
+        run: |
+          ECR_REPOSITORY_URL="$(terraform output -raw ecr_repository_url)"
+          docker build -t "$ECR_REPOSITORY_URL:latest" ../../
+          docker push "$ECR_REPOSITORY_URL:latest"
+
+      - name: Terraform Apply Full Stack
         run: terraform apply -auto-approve

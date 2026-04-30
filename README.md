@@ -157,6 +157,17 @@ cd infra/apprunner
 cp terraform.tfvars.example terraform.tfvars
 # edit terraform.tfvars (set openai_api_key at minimum)
 terraform init
+# first bootstrap pass (creates ECR + IAM role used by App Runner)
+terraform apply -target=aws_ecr_repository.app -target=aws_iam_role.apprunner_access_role -target=aws_iam_role_policy_attachment.apprunner_ecr_access
+```
+
+Push a bootstrap image before creating the App Runner service:
+
+```bash
+ECR_REPOSITORY_URL=$(terraform output -raw ecr_repository_url)
+aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin "${ECR_REPOSITORY_URL%/*}"
+docker build -t "$ECR_REPOSITORY_URL:latest" ../..
+docker push "$ECR_REPOSITORY_URL:latest"
 terraform apply
 ```
 
