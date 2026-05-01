@@ -2,11 +2,6 @@
 
 set -euo pipefail
 
-if [ -z "${APP_DOMAIN:-}" ]; then
-  echo "APP_DOMAIN is required."
-  exit 1
-fi
-
 if [ -z "${BACKEND_PUBLIC_URL:-}" ]; then
   echo "BACKEND_PUBLIC_URL is required."
   exit 1
@@ -35,6 +30,18 @@ if [ "${SKIP_GIT_PULL:-0}" != "1" ]; then
 fi
 
 LETSENCRYPT_EMAIL="${LETSENCRYPT_EMAIL:-admin@home.jaraflytech.com}"
+
+if [ -n "${APP_DOMAIN:-}" ]; then
+  EXTERNAL_BASE_URL="https://${APP_DOMAIN}"
+  NGINX_SERVER_NAME="${APP_DOMAIN}"
+else
+  if [ -z "${APP_PUBLIC_IP:-}" ]; then
+    echo "APP_PUBLIC_IP is required when APP_DOMAIN is not set."
+    exit 1
+  fi
+  EXTERNAL_BASE_URL="http://${APP_PUBLIC_IP}"
+  NGINX_SERVER_NAME="_"
+fi
 
 cat > /opt/meridian/.frontend.env <<EOF
 BACKEND_API_URL=${BACKEND_PUBLIC_URL}
@@ -69,7 +76,7 @@ EOF
 sudo tee /etc/nginx/sites-available/meridian-frontend.conf >/dev/null <<EOF
 server {
   listen 80;
-  server_name ${APP_DOMAIN};
+  server_name ${NGINX_SERVER_NAME};
 
   location / {
     proxy_pass http://127.0.0.1:3000;
@@ -90,8 +97,8 @@ sudo systemctl enable meridian-frontend nginx
 sudo systemctl restart meridian-frontend
 sudo systemctl restart nginx
 
-if getent hosts "${APP_DOMAIN}" >/dev/null 2>&1; then
+if [ -n "${APP_DOMAIN:-}" ] && getent hosts "${APP_DOMAIN}" >/dev/null 2>&1; then
   sudo certbot --nginx -d "${APP_DOMAIN}" --non-interactive --agree-tos -m "${LETSENCRYPT_EMAIL}" --redirect || true
 fi
 
-echo "Frontend deployed: https://${APP_DOMAIN}/"
+echo "Frontend deployed: ${EXTERNAL_BASE_URL}/"

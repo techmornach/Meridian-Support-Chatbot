@@ -2,11 +2,6 @@
 
 set -euo pipefail
 
-if [ -z "${APP_DOMAIN:-}" ]; then
-  echo "APP_DOMAIN is required."
-  exit 1
-fi
-
 if [ -z "${OPENAI_API_KEY:-}" ]; then
   echo "OPENAI_API_KEY is required."
   exit 1
@@ -45,9 +40,25 @@ MAX_INPUT_CHARS="${MAX_INPUT_CHARS:-4000}"
 HISTORY_CONTEXT_LIMIT="${HISTORY_CONTEXT_LIMIT:-30}"
 LOG_LEVEL="${LOG_LEVEL:-INFO}"
 ENABLE_OPENAI_TRACING="${ENABLE_OPENAI_TRACING:-true}"
-CORS_ALLOWED_ORIGINS="${CORS_ALLOWED_ORIGINS:-https://meridian.home.jaraflytech.com}"
+CORS_ALLOWED_ORIGINS="${CORS_ALLOWED_ORIGINS:-}"
 LETSENCRYPT_EMAIL="${LETSENCRYPT_EMAIL:-admin@home.jaraflytech.com}"
 DATABASE_URL="postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@127.0.0.1:5432/${POSTGRES_DB}"
+
+if [ -n "${APP_DOMAIN:-}" ]; then
+  EXTERNAL_BASE_URL="https://${APP_DOMAIN}"
+  NGINX_SERVER_NAME="${APP_DOMAIN}"
+else
+  if [ -z "${APP_PUBLIC_IP:-}" ]; then
+    echo "APP_PUBLIC_IP is required when APP_DOMAIN is not set."
+    exit 1
+  fi
+  EXTERNAL_BASE_URL="http://${APP_PUBLIC_IP}"
+  NGINX_SERVER_NAME="_"
+fi
+
+if [ -z "${CORS_ALLOWED_ORIGINS}" ]; then
+  CORS_ALLOWED_ORIGINS="${FRONTEND_PUBLIC_ORIGIN:-http://localhost:3000}"
+fi
 
 sudo systemctl enable postgresql
 sudo systemctl restart postgresql
@@ -91,7 +102,7 @@ EOF
 sudo tee /etc/nginx/sites-available/meridian-api.conf >/dev/null <<EOF
 server {
   listen 80;
-  server_name ${APP_DOMAIN};
+  server_name ${NGINX_SERVER_NAME};
 
   location / {
     proxy_pass http://127.0.0.1:8000;
@@ -112,8 +123,8 @@ sudo systemctl enable meridian-backend nginx
 sudo systemctl restart meridian-backend
 sudo systemctl restart nginx
 
-if getent hosts "${APP_DOMAIN}" >/dev/null 2>&1; then
+if [ -n "${APP_DOMAIN:-}" ] && getent hosts "${APP_DOMAIN}" >/dev/null 2>&1; then
   sudo certbot --nginx -d "${APP_DOMAIN}" --non-interactive --agree-tos -m "${LETSENCRYPT_EMAIL}" --redirect || true
 fi
 
-echo "Backend deployed: https://${APP_DOMAIN}/"
+echo "Backend deployed: ${EXTERNAL_BASE_URL}/"

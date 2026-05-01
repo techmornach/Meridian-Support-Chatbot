@@ -37,7 +37,7 @@ variable "allowed_ssh_cidr" {
 variable "hosted_zone_name" {
   description = "Route53 hosted zone name."
   type        = string
-  default     = "home.jaraflytech.com"
+  default     = ""
 }
 
 variable "frontend_subdomain" {
@@ -56,4 +56,22 @@ variable "availability_zone" {
   description = "Availability zone for the EC2 instance."
   type        = string
   default     = "us-east-1a"
+}
+
+variable "frontend_domain" {
+  description = "Optional full frontend domain (for example meridian.home.jaraflytech.com)."
+  type        = string
+  default     = ""
+}
+
+variable "backend_domain" {
+  description = "Optional full backend domain (for example api.home.jaraflytech.com)."
+  type        = string
+  default     = ""
+}
+
+variable "create_route53_records" {
+  description = "Whether to create Route53 A records for frontend_domain and backend_domain."
+  type        = bool
+  default     = false
 }

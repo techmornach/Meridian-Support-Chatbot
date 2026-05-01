@@ -4,6 +4,16 @@ frontend_instance_type = "t3.small"
 backend_instance_type  = "t3.small"
 ssh_key_name     = ""
 allowed_ssh_cidr = "0.0.0.0/0"
-hosted_zone_name = "home.jaraflytech.com"
+availability_zone = "us-east-1a"
+
+# Optional: set full domain names if you want DNS + HTTPS.
+frontend_domain = "meridian.home.jaraflytech.com"
+backend_domain  = "api.home.jaraflytech.com"
+
+# If true, Terraform creates Route53 A records in hosted_zone_name.
+create_route53_records = true
+hosted_zone_name       = "home.jaraflytech.com"
+
+# Optional fallback when frontend_domain/backend_domain are empty.
 frontend_subdomain = "meridian"
 backend_subdomain  = "api"

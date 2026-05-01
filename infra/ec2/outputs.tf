@@ -19,13 +19,23 @@ output "backend_public_ip" {
 }
 
 output "frontend_domain" {
-  value       = aws_route53_record.frontend.fqdn
-  description = "Frontend domain."
+  value       = local.frontend_domain != "" ? local.frontend_domain : aws_eip.frontend.public_ip
+  description = "Frontend domain if configured, otherwise frontend public IP."
 }
 
 output "backend_domain" {
-  value       = aws_route53_record.backend.fqdn
-  description = "Backend domain."
+  value       = local.backend_domain != "" ? local.backend_domain : aws_eip.backend.public_ip
+  description = "Backend domain if configured, otherwise backend public IP."
+}
+
+output "frontend_base_url" {
+  value       = local.frontend_domain != "" ? "https://${local.frontend_domain}" : "http://${aws_eip.frontend.public_ip}"
+  description = "Frontend base URL."
+}
+
+output "backend_base_url" {
+  value       = local.backend_domain != "" ? "https://${local.backend_domain}" : "http://${aws_eip.backend.public_ip}"
+  description = "Backend base URL."
 }
 
 output "frontend_ssh_command" {

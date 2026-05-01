@@ -18,7 +18,9 @@ jobs:
       - name: Deploy backend over SSH
         uses: appleboy/ssh-action@v1.0.3
         env:
-          APP_DOMAIN: api.home.jaraflytech.com
+          APP_DOMAIN: ${{ secrets.BACKEND_APP_DOMAIN }}
+          APP_PUBLIC_IP: ${{ secrets.EC2_BACKEND_HOST }}
+          FRONTEND_PUBLIC_ORIGIN: ${{ secrets.FRONTEND_APP_DOMAIN != '' && format('https://{0}', secrets.FRONTEND_APP_DOMAIN) || format('http://{0}', secrets.EC2_FRONTEND_HOST) }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           OPENAI_MODEL: gpt-4o-mini
           GUARDRAIL_MODEL: gpt-4o-mini
@@ -32,19 +34,21 @@ jobs:
           LOG_LEVEL: INFO
           ENABLE_OPENAI_TRACING: "true"
           LETSENCRYPT_EMAIL: ${{ secrets.LETSENCRYPT_EMAIL }}
-          CORS_ALLOWED_ORIGINS: https://meridian.home.jaraflytech.com
+          CORS_ALLOWED_ORIGINS: ${{ secrets.CORS_ALLOWED_ORIGINS }}
         with:
           host: ${{ secrets.EC2_BACKEND_HOST }}
           username: ${{ secrets.EC2_USER }}
           key: ${{ secrets.EC2_SSH_PRIVATE_KEY }}
           port: 22
-          envs: APP_DOMAIN,OPENAI_API_KEY,OPENAI_MODEL,GUARDRAIL_MODEL,MCP_SERVER_URL,POSTGRES_DB,POSTGRES_USER,POSTGRES_PASSWORD,AUTH_TOKEN_TTL_SECONDS,MAX_INPUT_CHARS,HISTORY_CONTEXT_LIMIT,LOG_LEVEL,ENABLE_OPENAI_TRACING,LETSENCRYPT_EMAIL,CORS_ALLOWED_ORIGINS
+          envs: APP_DOMAIN,APP_PUBLIC_IP,FRONTEND_PUBLIC_ORIGIN,OPENAI_API_KEY,OPENAI_MODEL,GUARDRAIL_MODEL,MCP_SERVER_URL,POSTGRES_DB,POSTGRES_USER,POSTGRES_PASSWORD,AUTH_TOKEN_TTL_SECONDS,MAX_INPUT_CHARS,HISTORY_CONTEXT_LIMIT,LOG_LEVEL,ENABLE_OPENAI_TRACING,LETSENCRYPT_EMAIL,CORS_ALLOWED_ORIGINS
           script_stop: true
           script: |
             set -euxo pipefail
             curl -fsSL https://raw.githubusercontent.com/techmornach/Meridian-Support-Chatbot/main/scripts/ec2-deploy-backend.sh -o /tmp/ec2-deploy-backend.sh
             chmod +x /tmp/ec2-deploy-backend.sh
             APP_DOMAIN="${APP_DOMAIN}" \
+            APP_PUBLIC_IP="${APP_PUBLIC_IP}" \
+            FRONTEND_PUBLIC_ORIGIN="${FRONTEND_PUBLIC_ORIGIN}" \
             OPENAI_API_KEY="${OPENAI_API_KEY}" \
             OPENAI_MODEL="${OPENAI_MODEL}" \
             GUARDRAIL_MODEL="${GUARDRAIL_MODEL}" \
@@ -68,21 +72,23 @@ jobs:
       - name: Deploy frontend over SSH
         uses: appleboy/ssh-action@v1.0.3
         env:
-          APP_DOMAIN: meridian.home.jaraflytech.com
-          BACKEND_PUBLIC_URL: https://api.home.jaraflytech.com
+          APP_DOMAIN: ${{ secrets.FRONTEND_APP_DOMAIN }}
+          APP_PUBLIC_IP: ${{ secrets.EC2_FRONTEND_HOST }}
+          BACKEND_PUBLIC_URL: ${{ secrets.BACKEND_APP_DOMAIN != '' && format('https://{0}', secrets.BACKEND_APP_DOMAIN) || format('http://{0}', secrets.EC2_BACKEND_HOST) }}
           LETSENCRYPT_EMAIL: ${{ secrets.LETSENCRYPT_EMAIL }}
         with:
           host: ${{ secrets.EC2_FRONTEND_HOST }}
           username: ${{ secrets.EC2_USER }}
           key: ${{ secrets.EC2_SSH_PRIVATE_KEY }}
           port: 22
-          envs: APP_DOMAIN,BACKEND_PUBLIC_URL,LETSENCRYPT_EMAIL
+          envs: APP_DOMAIN,APP_PUBLIC_IP,BACKEND_PUBLIC_URL,LETSENCRYPT_EMAIL
           script_stop: true
           script: |
             set -euxo pipefail
             curl -fsSL https://raw.githubusercontent.com/techmornach/Meridian-Support-Chatbot/main/scripts/ec2-deploy-frontend.sh -o /tmp/ec2-deploy-frontend.sh
             chmod +x /tmp/ec2-deploy-frontend.sh
             APP_DOMAIN="${APP_DOMAIN}" \
+            APP_PUBLIC_IP="${APP_PUBLIC_IP}" \
             BACKEND_PUBLIC_URL="${BACKEND_PUBLIC_URL}" \
             LETSENCRYPT_EMAIL="${LETSENCRYPT_EMAIL}" \
             /tmp/ec2-deploy-frontend.sh

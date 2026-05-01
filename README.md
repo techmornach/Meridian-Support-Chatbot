@@ -130,75 +130,6 @@ curl -X GET "http://localhost:8000/conversations/me?limit=30" \
   -H "Authorization: Bearer <TOKEN>"
 ```
 
-## Deploy to AWS App Runner (single container)
-
-This repo now includes a simple single-container deployment setup for:
-
-- Next.js frontend
-- FastAPI backend
-- PostgreSQL database (inside the same container)
-
-### Important limitation
-
-Because PostgreSQL runs inside the App Runner container, data is ephemeral and can be lost on replacement/redeploy events. This is suitable for demos/POCs, not durable production data.
-
-### Files added for deployment
-
-- `Dockerfile`
-- `scripts/apprunner-start.sh`
-- `infra/apprunner/*.tf` (Terraform for ECR + App Runner)
-- `.github/workflows/terraform-apprunner.yml`
-- `.github/workflows/deploy-apprunner.yml`
-
-### 1) Provision infrastructure with Terraform
-
-```bash
-cd infra/apprunner
-cp terraform.tfvars.example terraform.tfvars
-# edit terraform.tfvars (set openai_api_key at minimum)
-terraform init
-# first bootstrap pass (creates ECR + IAM role used by App Runner)
-terraform apply -target=aws_ecr_repository.app -target=aws_iam_role.apprunner_access_role -target=aws_iam_role_policy_attachment.apprunner_ecr_access
-```
-
-Push a bootstrap image before creating the App Runner service:
-
-```bash
-ECR_REPOSITORY_URL=$(terraform output -raw ecr_repository_url)
-aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin "${ECR_REPOSITORY_URL%/*}"
-docker build -t "$ECR_REPOSITORY_URL:latest" ../..
-docker push "$ECR_REPOSITORY_URL:latest"
-terraform apply
-```
-
-Save outputs:
-
-- `ecr_repository_url`
-- `apprunner_service_arn`
-- `apprunner_service_url`
-
-### 2) Configure GitHub repository secrets
-
-Set these secrets in your GitHub repo:
-
-- `AWS_ROLE_TO_ASSUME` (OIDC role for GitHub Actions)
-- `AWS_REGION` (e.g. `us-east-1`)
-- `ECR_REPOSITORY` (repository name, e.g. `meridian-support-chatbot-app`)
-- `APP_RUNNER_SERVICE_ARN` (from Terraform output)
-- `OPENAI_API_KEY` (used by Terraform workflow)
-
-### 3) Deploy flow
-
-- Run `Terraform App Runner` workflow once (or whenever infra changes).
-- Push to `main` (or trigger `Deploy App Runner` workflow manually).
-- Workflow builds/pushes Docker image to ECR and triggers `start-deployment` on App Runner.
-
-### 4) Destroy infrastructure
-
-- Run `Terraform Destroy App Runner` workflow manually.
-- In the workflow input, set `confirm_destroy` to `DESTROY`.
-- This tears down App Runner + ECR resources managed by `infra/apprunner`.
-
 ## Fast EC2 deployment (no Docker)
 
 For fastest stakeholder sharing, use native EC2 services (no containers):
@@ -206,34 +137,62 @@ For fastest stakeholder sharing, use native EC2 services (no containers):
 - PostgreSQL on EC2
 - FastAPI backend as `systemd` service
 - Next.js frontend as `systemd` service
-- Caddy for HTTPS + reverse proxy
-- Route53 record: `https://meridian.home.jaraflytech.com/`
+- Nginx reverse proxy
+- Optional Let's Encrypt HTTPS when domains are provided
 
-### 1) Provision EC2 + DNS
+### One-command bootstrap (recommended)
+
+1) Create your deploy config:
 
 ```bash
-cd infra/ec2
-cp terraform.tfvars.example terraform.tfvars
-terraform init
-terraform apply
+cp deploy/.env.example deploy/.env
 ```
 
-### 2) GitHub secrets for deploy workflow
+2) Edit `deploy/.env`:
 
-Set:
+- Set required values:
+  - `SSH_PRIVATE_KEY_PATH`
+  - `OPENAI_API_KEY`
+- Choose one routing mode:
+  - **Domain + HTTPS mode**
+    - Set `FRONTEND_DOMAIN` and `BACKEND_DOMAIN`
+    - Set `CREATE_ROUTE53_RECORDS=true` and `HOSTED_ZONE_NAME` if Terraform should create Route53 records
+  - **IP + HTTP mode**
+    - Leave `FRONTEND_DOMAIN` and `BACKEND_DOMAIN` empty
+    - Set `CREATE_ROUTE53_RECORDS=false`
 
-- `EC2_HOST` (public IP or DNS from Terraform output)
-- `EC2_USER` (`ubuntu`)
-- `EC2_SSH_PRIVATE_KEY` (private key for the instance key pair)
-- `OPENAI_API_KEY`
-- `MCP_SERVER_URL`
-- `POSTGRES_PASSWORD`
+3) Run bootstrap:
 
-The workflow `Deploy EC2` uses your real app env shape (`OPENAI_MODEL`, `GUARDRAIL_MODEL`, `AUTH_TOKEN_TTL_SECONDS`, `MAX_INPUT_CHARS`, `HISTORY_CONTEXT_LIMIT`, `LOG_LEVEL`, `ENABLE_OPENAI_TRACING`) with values aligned to current `.env`.
+```bash
+./scripts/bootstrap-deploy.sh
+```
 
-### 3) Deploy
+This command:
 
-- Run `Deploy EC2` workflow (or push to `main`).
-- It executes `scripts/ec2-deploy.sh` on the instance.
-- When complete, app should be reachable at:
-  - `https://meridian.home.jaraflytech.com/`
+- runs `terraform init/apply` in `infra/ec2`
+- reads instance IP outputs
+- deploys backend + frontend over SSH
+- configures domains/HTTPS only when domains are provided
+- falls back to IP-based HTTP URLs when domains are omitted
+- runs smoke checks and prints final URLs
+
+### Notes
+
+- Domain mode requires DNS to resolve to the instance IPs before TLS can be issued.
+- If DNS is not ready yet, deployment still succeeds on HTTP and you can rerun bootstrap later to enable HTTPS.
+
+### Optional GitHub workflow deploy mode
+
+The `Deploy EC2` workflow also supports both routing modes:
+
+- Domain + HTTPS mode:
+  - set `FRONTEND_APP_DOMAIN` and `BACKEND_APP_DOMAIN` secrets
+- IP + HTTP mode:
+  - leave `FRONTEND_APP_DOMAIN` and `BACKEND_APP_DOMAIN` empty
+  - workflow falls back to `http://<EC2_HOST>` automatically
+
+Required deploy secrets include:
+
+- `EC2_FRONTEND_HOST`, `EC2_BACKEND_HOST`, `EC2_USER`, `EC2_SSH_PRIVATE_KEY`
+- `OPENAI_API_KEY`, `MCP_SERVER_URL`, `POSTGRES_PASSWORD`
+- optional: `LETSENCRYPT_EMAIL`, `CORS_ALLOWED_ORIGINS`
